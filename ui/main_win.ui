@@ -1448,6 +1448,7 @@
      <string>高级</string>
     </property>
     <addaction name="action"/>
+    <addaction name="action_6"/>
    </widget>
    <widget class="QMenu" name="menu_3">
     <property name="title">
@@ -1488,6 +1489,11 @@
   <action name="action_5">
    <property name="text">
     <string>OpenSees文档</string>
+   </property>
+  </action>
+  <action name="action_6">
+   <property name="text">
+    <string>终端输出</string>
    </property>
   </action>
  </widget>

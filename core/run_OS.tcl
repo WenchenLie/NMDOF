@@ -23,6 +23,9 @@ proc run_OS_tcl {N m mat_lib story_mat th_path SF dt mode_num has_damping zeta_m
     set nodeTag [expr $i + 3]
 
     # material
+    set f [open "$path/temp_NLMDOF_results/done.txt" w]
+    puts $f 2
+    close $f
     for {set i 0} {$i < [llength $mat_lib]} {incr i} {
         set mat [lrange [lindex $mat_lib $i] 0 end]
         uniaxialMaterial {*}$mat
@@ -207,7 +210,7 @@ if {$argc == 0} {
     set m [list 2 1 1]
     set mat_lib [list [list Steel01 1 3000 1500 0.02] [list Steel01 2 2000 1000 0.02]]
     set story_mat [list [list 1] [list 2] [list 2]]
-    set th_path "test/ChiChi.txt";  # replace "xxx" with groumd motion path
+    set th_path "test/ChiChi.txt";  # replace "xxx" with groumd motion path1
     set SF 1
     set dt 0.01
     set mode_num 3

@@ -1,4 +1,5 @@
 import os
+import traceback
 from math import pi
 from typing import Literal
 
@@ -23,7 +24,7 @@ def run_OS_py(
         gm_name: str,
         g: float,
         print_result=False
-    ) -> tuple[Literal[0, 1], list[float], list[list]]:
+    ) -> tuple[Literal[0, 1, 2], list[float], list[list]]:
     """调用openseespy求解非线性多自由度
 
     Args:
@@ -43,6 +44,12 @@ def run_OS_py(
         gm_name (str): 地震动名
         g (float): 重力加速度
         print_result (bool, optional): 是否打印结果. Defaults to False.
+
+    Returns:
+        tuple[Literal[0, 1, 2], list[float], list[list]]:  
+        (1) 0: 分析完成，1: 分析不收敛，2: 材料错误  
+        (2) 周期值  
+        (3) 各振型模态
     """
     def myprint(*str_):
         if print_result:
@@ -80,7 +87,12 @@ def run_OS_py(
     
     # material
     for i, mat in enumerate(mat_lib):
-        ops.uniaxialMaterial(*mat)
+        try:
+            ops.uniaxialMaterial(*mat)
+        except Exception as e:
+            print(traceback.format_exc())
+            print(e.args)
+            return 2, None, None
     matTag = i + 2
     
     # element

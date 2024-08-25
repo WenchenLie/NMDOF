@@ -1,10 +1,12 @@
 import os
 import re
+import sys
 from typing import Literal
 from shutil import rmtree
 from pathlib import Path
 
 import dill
+import shutil
 import seismicutils as su
 import numpy as np
 import pyqtgraph as pg
@@ -12,7 +14,9 @@ import openpyxl as px
 from openpyxl.worksheet.worksheet import Worksheet
 from PyQt5.QtGui import QIntValidator, QDoubleValidator, QFont, QColor
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QPoint
-from PyQt5.QtWidgets import QApplication, QMessageBox, QFileDialog, QDialog, QTableWidgetItem, QMainWindow, QMenu, QTableWidgetItem, QHeaderView, QTableWidget, QLabel
+from PyQt5.QtWidgets import QApplication, QMessageBox, QFileDialog, QDialog,\
+    QTableWidgetItem, QMainWindow, QMenu, QTableWidgetItem, QHeaderView,\
+    QTableWidget, QLabel, QTextEdit
 
 import core
 from ui.main_win import Ui_MainWindow
@@ -27,13 +31,14 @@ from ui.win_tcl_file import Ui_win_tcl_file
 from ui.win_data import Ui_win_data
 from ui.win_export import Ui_win_export
 from ui.win_about import Ui_win_about
+from ui.win_terminal import Ui_win_terminal
 
 
 SOFTWARE = '非线性多自由度时程分析软件'
-VERSION = 'V2.0'
-DATE = '2024.08.24'
+VERSION = 'V2.0.1'
+DATE = '2024.08.25'
 TEMP_PATH = Path(os.getenv('TEMP')).as_posix()
-ROOT = Path.cwd()
+ROOT = Path(__file__).parent.parent
 
 
 class MyWin(QMainWindow):
@@ -146,7 +151,9 @@ class MyWin(QMainWindow):
         self.statusBar_label_right = QLabel('', self)
         self.statusBar().addPermanentWidget(self.statusBar_label_right)
         self.ui.action_2.triggered.connect(self.open_win_about)
-
+        self.ui.action_6.triggered.connect(self.open_win_terminal)
+        self.win_terminal = Win_terminal(self)
+        self.win_terminal.setModal(False)
 
     def init_gm_var(self):
         """初始化地震动变量"""
@@ -620,8 +627,9 @@ class MyWin(QMainWindow):
     def run(self, script_type: Literal['py', 'tcl']):
         """script_type: 'py' or 'tcl'"""
         if self.ready_to_run():
-            if not (Path(TEMP_PATH) / 'temp_NLMDOF_results').exists():
-                os.makedirs((Path(TEMP_PATH) / 'temp_NLMDOF_results').as_posix())
+            if (Path(TEMP_PATH) / 'temp_NLMDOF_results').exists():
+                shutil.rmtree(Path(TEMP_PATH) / 'temp_NLMDOF_results')
+            os.makedirs((Path(TEMP_PATH) / 'temp_NLMDOF_results').as_posix())
             if self.ui.radioButton.isChecked():
                 script_type = 'py'
             else:
@@ -707,9 +715,10 @@ if {{$result != 0}} {{
             gm_name: str,
             NPTS: int,
             print_result: bool=True
-        ):
+        ) -> str:
         """修改tcl文件"""
-        with open('core/run_OS.tcl', 'r', encoding='utf=8') as f:
+        run_OS_file = ROOT / 'core/run_OS.tcl'
+        with open(run_OS_file, 'r', encoding='utf=8') as f:
             text = f.read()
         text1 = str(int(N))
         text2 = ' '.join([str(i) for i in m])
@@ -901,12 +910,16 @@ if {{$result != 0}} {{
         if skip:
             print(skip)
             return
+        self.export_set_text('')
         if self.ui.comboBox_5.currentText() == '振型':
             x = list(range(0, self.N + 1, 1))
             y = self.mode_results(self.ui.comboBox_8.currentIndex() + 1)
             y = np.insert(y, 0, 0)
             self.plot_result_mode(x, y, f'第{self.ui.comboBox_8.currentIndex()+1}阶振型')
             self.update_graph_data(x, y, '振型', '楼层', '位移')
+            n = self.ui.comboBox_8.currentIndex() + 1
+            T = self.mode_results.T[n - 1]
+            self.export_set_text(f'T{n} = {T:.4f} s')
         else:
             story_id = self.ui.comboBox_6.currentIndex() + 1
             gm_idx = self.ui.comboBox_8.currentIndex()
@@ -918,16 +931,19 @@ if {{$result != 0}} {{
             case_ = f'{gm_name}第{story_id}层相对位移'
             self.plot_result_th(t, ru, 't [s]', '相对位移 [mm]', case_)
             self.update_graph_data(t, ru, case_, 't [s]', '相对位移 [mm]')
+            self.export_set_text(f'最大相对位移：{np.max(np.abs(ru)):.6f}')
         elif self.ui.comboBox_5.currentText() == '相对速度':
             rv = results.rv[:, story_id - 1]
             case_ = f'{gm_name}第{story_id}层相对速度'
             self.plot_result_th(t, rv, 't [s]', '相对速度 [mm/s]', case_)
             self.update_graph_data(t, rv, case_, 't [s]', '相对速度 [mm/s]')
+            self.export_set_text(f'最大相对速度：{np.max(np.abs(rv)):.6f}')
         elif self.ui.comboBox_5.currentText() == '相对加速度':
             ra = results.ra[:, story_id - 1] / self.g
             case_ = f'{gm_name}第{story_id}层相对加速度'
             self.plot_result_th(t, ra, 't [s]', '相对加速度 [g]', case_)
             self.update_graph_data(t, ra, case_, 't [s]', '相对加速度 [g]')
+            self.export_set_text(f'最大相对加速度：{np.max(np.abs(ra)):.6f}')
         elif self.ui.comboBox_5.currentText() == '最大层间位移':
             x_story = list(range(0, self.N + 1, 1))
             ru = results.ru
@@ -938,6 +954,7 @@ if {{$result != 0}} {{
             case_ = f'{gm_name}最大层间位移'
             self.plot_result_th(x_story, max_IDR, '楼层', '最大层间位移 [mm]', case_, True)
             self.update_graph_data(x_story, max_IDR, case_, '楼层', '最大层间位移 [mm]')
+            self.export_set_text(f'最大层间位移：{np.max(np.abs(max_IDR)):.6f}')
         elif self.ui.comboBox_5.currentText() == '最大层间残余位移':
             x_story = list(range(0, self.N + 1, 1))
             resu = results.resu
@@ -947,21 +964,25 @@ if {{$result != 0}} {{
             case_ = f'{gm_name}最大层间残余位移'
             self.plot_result_th(x_story, RIDR, '楼层', '最大层间残余位移 [mm]', case_, True)
             self.update_graph_data(x_story, RIDR, case_, '楼层', '最大层间残余位移 [mm]')
+            self.export_set_text(f'最大层间残余位移：{np.max(np.abs(RIDR)):.6f}')
         elif self.ui.comboBox_5.currentText() == '绝对位移':
             au = results.au[:, story_id - 1]
             case_ = f'{gm_name}第{story_id}层绝对位移'
             self.plot_result_th(t, au, 't [s]', '绝对位移 [mm]', case_)
             self.update_graph_data(t, au, case_, 't [s]', '绝对位移 [mm]')
+            self.export_set_text(f'最大绝对位移：{np.max(np.abs(au)):.6f}')
         elif self.ui.comboBox_5.currentText() == '绝对速度':
             av = results.av[:, story_id - 1]
             case_ = f'{gm_name}第{story_id}层绝对速度'
             self.plot_result_th(t, av, 't [s]', '绝对速度 [mm/s]', case_)
             self.update_graph_data(t, av, case_, 't [s]', '绝对速度 [mm/s]')
+            self.export_set_text(f'最大绝对速度：{np.max(np.abs(av)):.6f}')
         elif self.ui.comboBox_5.currentText() == '绝对加速度':
             aa = results.aa[:, story_id - 1] / self.g
             case_ = f'{gm_name}第{story_id}层绝对加速度'
             self.plot_result_th(t, aa, 't [s]', '绝对加速度 [g]', case_)
             self.update_graph_data(t, aa, case_, 't [s]', '绝对加速度 [g]')
+            self.export_set_text(f'最大绝对加速度：{np.max(np.abs(aa)):.6f}')
         elif self.ui.comboBox_5.currentText() == '楼层剪力':
             story_idx = self.ui.comboBox_6.currentIndex()
             mat_idx = self.story_mat.copy()
@@ -986,11 +1007,13 @@ if {{$result != 0}} {{
             case_ = f'{gm_name}第{story_idx+1}层层间剪力'
             self.plot_result_th(t, F / 1000, 't [s]', '力 [kN]', case_)
             self.update_graph_data(t, F / 1000, case_, 't [s]', '力 [kN]')
+            self.export_set_text(f'最大剪力：{np.max(np.abs(F / 1000)):.6f}')
         elif self.ui.comboBox_5.currentText() == '底部剪力':
             base_V = results.base_V / 1000
             case_ = f'{gm_name}底部剪力'
             self.plot_result_th(t, base_V, 't [s]', '底部剪力 [kN]', case_)
             self.update_graph_data(t, base_V, case_, 't [s]', '底部剪力 [kN]')
+            self.export_set_text(f'最大底部剪力：{np.max(np.abs(base_V)):.6f}')
         elif self.ui.comboBox_5.currentText() == '材料滞回曲线':
             story_idx = self.ui.comboBox_6.currentIndex()
             stressStrain = results.mat
@@ -1026,6 +1049,7 @@ if {{$result != 0}} {{
             case_ = f'{gm_name}第{story_idx+1}层材料滞回曲线'
             self.plot_result_th(u, F / 1000, '位移 [mm]', '力 [kN]', case_)
             self.update_graph_data(u, F / 1000, case_, '位移 [mm]', '力 [kN]')
+            self.export_set_text(f'最大材料变形：{np.max(np.abs(u)):.6f}')
         elif self.ui.comboBox_5.currentText() == '楼层剪力包络':
             x_story = list(range(0, self.N + 1, 1))[1:]
             story_idx = self.ui.comboBox_6.currentIndex()
@@ -1055,6 +1079,7 @@ if {{$result != 0}} {{
             case_ = f'{gm_name}第{story_idx+1}层层间剪力包络'
             self.plot_result_th(x_story, F, '楼层', '最大剪力 [kN]', case_, True)
             self.update_graph_data(x_story, F, case_, '楼层', '最大剪力 [kN]')
+            self.export_set_text(f'最大层间剪力：{np.max(np.abs(F)):.6f}')
         elif self.ui.comboBox_5.currentText() == '绝对加速度包络':
             x_story = list(range(0, self.N + 1, 1))[1:]
             aa = results.aa / self.g
@@ -1062,7 +1087,8 @@ if {{$result != 0}} {{
             case_ = f'{gm_name}绝对加速度包络'
             self.plot_result_th(x_story, max_aa, 't [s]', '绝对加速度包络 [g]', case_, True)
             self.update_graph_data(x_story, max_aa, case_, 't [s]', '绝对加速度包络 [g]')
-        self.display_period()
+            self.export_set_text(f'最大绝对加速度：{np.max(np.abs(max_aa)):.6f}')
+        # self.display_period()
 
     def plot_result_th(self, x, y, x_label, y_label, case_, plot_scatter=False):
         print('【MyWin, plot_result_mode】绘制时程曲线 - ' + case_)
@@ -1218,12 +1244,15 @@ if {{$result != 0}} {{
     def open_win_about(self):
         win = Win_about()
         win.exec_()
+    
+    def open_win_terminal(self):
+        self.win_terminal.show()
 
 
 class Win_importGM(QDialog):
     """导入地震动窗口"""
-    def __init__(self, main: MyWin):
-        super().__init__()
+    def __init__(self, main: MyWin, parent=None):
+        super().__init__(parent)
         self.ui = Ui_win_importGM()
         self.main = main
         self.ui.setupUi(self)
@@ -1372,8 +1401,8 @@ class Win_importGM1(QDialog):
     gm_name = {0: 'ChiChi', 1: 'Friuli', 2: 'Hollister', 3: 'Imperial_Valley', 4: 'Kobe',\
                5: 'Kocaeli', 6: 'Landers', 7: 'Loma_Prieta', 8: 'Northridge', 9: 'Trinidad'}
 
-    def __init__(self, main: MyWin):
-        super().__init__()
+    def __init__(self, main: MyWin, parent=None):
+        super().__init__(parent)
         self.ui = Ui_win_importGM1()
         self.main = main
         self.ui.setupUi(self)
@@ -1410,8 +1439,8 @@ class Win_importGM1(QDialog):
 
 class Win_mass(QDialog):
     """定义质量窗口"""
-    def __init__(self, main: MyWin):
-        super().__init__()
+    def __init__(self, main: MyWin, parent=None):
+        super().__init__(parent)
         self.ui = Ui_win_mass()
         self.main = main
         self.ui.setupUi(self)
@@ -1521,8 +1550,8 @@ class Win_mass(QDialog):
 
 class Win_mat(QDialog):
     """定义材料窗口"""
-    def __init__(self, main: MyWin, mat_idx, mod_idx=None):
-        super().__init__()
+    def __init__(self, main: MyWin, mat_idx, mod_idx=None, parent=None):
+        super().__init__(parent)
         self.ui = Ui_win_mat()
         self.main = main
         self.mat_idx = mat_idx
@@ -1659,7 +1688,7 @@ class Win_mat(QDialog):
             else:
                 para = [commentName, 4, have_name, 'Viscous', int(self.main.mat_N + 1), p1, p2]
         for i in range(5, len(para)):
-            para[i] = float(para[i])
+            para[i] = eval(para[i])
         if type(self.mod_idx) is int:
             # 修改模式
             para[4] = self.main.mat_lib[self.mod_idx][4]
@@ -1677,8 +1706,8 @@ class Win_mat(QDialog):
 
 
 class Win_OSmat(QDialog):
-    def __init__(self, main: MyWin, mod_idx=None):
-        super().__init__()
+    def __init__(self, main: MyWin, mod_idx=None, parent=None):
+        super().__init__(parent)
         self.ui = Ui_win_OSmat()
         self.main = main
         self.ui.setupUi(self)
@@ -1747,7 +1776,7 @@ class Win_OSmat(QDialog):
         for i in range(2, self.ui.tableWidget.rowCount()):
             para = self.ui.tableWidget.item(i, 0).text()
             try:
-                para = float(para)
+                para = eval(para)
             except:
                 pass
             mat_para.append(para)
@@ -1759,14 +1788,15 @@ class Win_OSmat(QDialog):
             mat[2] = 1
         mat[1] = -1  # OpenSees材料的材料种类设为-1
         mat[3] = mat_type
-        mat[4] = self.main.mat_N + 1
         mat += mat_para
         if type(self.mod_idx) is int:
+            mat[4] = self.main.mat_lib[self.mod_idx][4]  # 修改模式下材料的序号不变
             self.main.mat_lib[self.mod_idx] = mat
             self.main.update_conbeBox_mat()
             self.main.ui.listWidget_2.item(self.mod_idx).setText(f'({int(mat[4])}) {mat[0]}')
             print('【Win_OSmat, ok】已修改：', mat)
         else:
+            mat[4] = self.main.mat_N + 1
             self.main.mat_lib.append(mat)
             self.main.mat_N += 1
             print('【Win_OSmat, ok】已定义：', mat)
@@ -1838,8 +1868,8 @@ class Win_OSmat(QDialog):
 
 
 class Win_setting(QDialog):
-    def __init__(self, main: MyWin):
-        super().__init__()
+    def __init__(self, main: MyWin, parent=None):
+        super().__init__(parent)
         self.ui = Ui_win_solve_setting()
         self.main = main
         self.ui.setupUi(self)
@@ -2015,8 +2045,8 @@ class Win_run(QDialog):
     signal_converge_fail = pyqtSignal()
     signal_finished = pyqtSignal()
 
-    def __init__(self, main: MyWin, script_type):
-        super().__init__()
+    def __init__(self, main: MyWin, script_type, parent=None):
+        super().__init__(parent)
         self.ui = Ui_win_run()
         self.main = main
         self.script_type = script_type
@@ -2063,6 +2093,10 @@ class Win_run(QDialog):
             self.accept()
             QMessageBox.warning(self, '警告', f'地震动{list_[1]}不收敛！')
             self.signal_converge_fail.emit()
+        elif list_[0] == 2:
+            self.accept()
+            QMessageBox.warning(self, '警告', f'材料参数不正确！')
+            self.signal_converge_fail.emit()
 
     @staticmethod
     def add_free_vibration(th: np.ndarray, fv_time: int | float, dt: float) -> np.ndarray:
@@ -2078,8 +2112,8 @@ class WorkerThread(QThread):
     signal_step = pyqtSignal(list)
     signal_converge = pyqtSignal(list)  # [n, gm_name], n=1: 收敛，n=0: 不收敛
 
-    def __init__(self, main: MyWin, script_type: str):
-        super().__init__()
+    def __init__(self, main: MyWin, script_type: str, parent=None):
+        super().__init__(parent)
         self.main = main
         self.script_type = script_type
         self.is_kill = 0
@@ -2097,7 +2131,7 @@ class WorkerThread(QThread):
             if self.is_kill == 1:
                 self.signal_finished.emit(0)
                 break  # 完成计算
-            if done == 0:
+            if done in [0, 2]:
                 break  # 不收敛
         else:
             self.signal_finished.emit(1)
@@ -2185,11 +2219,18 @@ class WorkerThread(QThread):
         with open(path_tcl + '\\main.tcl', 'w') as f:
             f.write(tcl_script)
         os.system(f"{self.main.OS_terminal} {path_tcl}\\main.tcl")
-        with open(path + '\\temp_NLMDOF_results\\done.txt', 'r') as f:
-            if '1' in f.read():
-                done = 1
-            else:
-                done = 0
+        try:
+            with open(path + '\\temp_NLMDOF_results\\done.txt', 'r') as f:
+                done_file = f.read()
+                if '1' in done_file:
+                    done = 1
+                elif '2' in done_file:
+                    done = 2
+                else:
+                    done = 0
+        except FileNotFoundError:
+            print(f'【WorkerThread, solve_tcl】未找到文件：{path}\\temp_NLMDOF_results\\done.txt')
+            done = 0
         self.signal_converge.emit([done, gm_name])
         return done
     
@@ -2203,8 +2244,8 @@ class WorkerThread(QThread):
                 # 材料为内置的Wen模型
                 new_mat = mat.copy()[:5]
                 gamma2, beta2 = 0.5, 0.5
-                Fy, uy = float(mat[5]), float(mat[6])
-                alpha, n = float(mat[7]), float(mat[8])
+                Fy, uy = eval(mat[5]), eval(mat[6])
+                alpha, n = eval(mat[7]), eval(mat[8])
                 k = Fy / uy
                 beta1 = beta2 / uy ** n
                 gamma1 = gamma2 / uy ** n
@@ -2217,8 +2258,8 @@ class WorkerThread(QThread):
 
 
 class Win_tcl_file(QDialog):
-    def __init__(self, text):
-        super().__init__()
+    def __init__(self, text, parent=None):
+        super().__init__(parent)
         self.ui = Ui_win_tcl_file()
         self.ui.setupUi(self)
         self.init_ui(text)
@@ -2228,8 +2269,8 @@ class Win_tcl_file(QDialog):
 
 
 class Win_data(QDialog):
-    def __init__(self, main: MyWin):
-        super().__init__()
+    def __init__(self, main: MyWin, parent=None):
+        super().__init__(parent)
         self.ui = Ui_win_data()
         self.main = main
         self.ui.setupUi(self)
@@ -2309,8 +2350,8 @@ class Win_data(QDialog):
 
 
 class Win_export(QDialog):
-    def __init__(self, main: MyWin):
-        super().__init__()
+    def __init__(self, main: MyWin, parent=None):
+        super().__init__(parent)
         self.ui = Ui_win_export()
         self.main = main
         self.ui.setupUi(self)
@@ -2333,8 +2374,8 @@ class Thread_export_data(QThread):
     signal_msg = pyqtSignal(list)
     signal_info = pyqtSignal(str)  # 导出数据提示
 
-    def __init__(self, main: MyWin, export_type: str, path: str):
-        super().__init__()
+    def __init__(self, main: MyWin, export_type: str, path: str, parent=None):
+        super().__init__(parent)
         self.main = main
         self.export_type = export_type
         self.path = path
@@ -2698,8 +2739,8 @@ class Thread_export_data(QThread):
 
 
 class Win_about(QDialog):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, parent=None):
+        super().__init__(parent)
         self.ui = Ui_win_about()
         self.ui.setupUi(self)
         self.init_ui()
@@ -2710,3 +2751,11 @@ class Win_about(QDialog):
         text = text.replace('Version', VERSION)
         self.ui.label_3.setText(text)
 
+
+class Win_terminal(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.ui = Ui_win_terminal()
+        self.ui.setupUi(self)
+        sys.stdout = core.EmittingStream(self.ui.textEdit)
+        sys.stderr = core.EmittingStream(self.ui.textEdit)

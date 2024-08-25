@@ -1,0 +1,7 @@
+<RCC>
+  <qresource prefix="插图">
+    <file>N.png</file>
+    <file>MDOF示意图.png</file>
+    <file>logo.png</file>
+  </qresource>
+</RCC>

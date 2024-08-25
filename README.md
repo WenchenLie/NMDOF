@@ -1,0 +1,2 @@
+# NMDOF
+A software for nonlinear time history analysis of multi-degree-of-freedom (MDOF) system using OpenSees. All material that avaiable in OpenSees can be used in NMDOF. Users can also use their own material models in NMDOF through selecting executable OpenSees.exe.

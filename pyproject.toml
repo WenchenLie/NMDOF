@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "nlmdof"
+version = "2.0"
+description = "Tool for time history analysis of nonlinear MDOF system using OpenSees"
+authors = ["Wenchen Lie <438171766@qq.com>"]
+license = "GPLv3"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+numpy = "^2.1.0"
+openpyxl = "^3.1.5"
+dill = "^0.3.8"
+seismicutils = "^0.1.0"
+pyqtgraph = "^0.13.7"
+pyqt5 = "5.15.10"
+pyqt5-qt5 = "5.15.2"
+
+[tool.poetry.group.dev.dependencies]
+nuitka = "^2.4.7"
+imageio = "^2.35.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

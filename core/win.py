@@ -16,7 +16,7 @@ from PyQt5.QtGui import QIntValidator, QDoubleValidator, QFont, QColor
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QPoint
 from PyQt5.QtWidgets import QApplication, QMessageBox, QFileDialog, QDialog,\
     QTableWidgetItem, QMainWindow, QMenu, QTableWidgetItem, QHeaderView,\
-    QTableWidget, QLabel, QTextEdit
+    QTableWidget, QLabel
 
 import core
 from ui.main_win import Ui_MainWindow
@@ -35,8 +35,8 @@ from ui.win_terminal import Ui_win_terminal
 
 
 SOFTWARE = '非线性多自由度时程分析软件'
-VERSION = 'V2.0.1'
-DATE = '2024.08.25'
+VERSION = 'V2.0.2'
+DATE = '2024.08.26'
 TEMP_PATH = Path(os.getenv('TEMP')).as_posix()
 ROOT = Path(__file__).parent.parent
 
@@ -1335,7 +1335,16 @@ class Win_importGM(QDialog):
                 self.main.gm_t.append(t)
             self.main.gm_N += 1
             self.main.gm_dt.append(dt)
-            self.main.gm_name.append(os.path.basename(path).split('.')[0])
+            gm_name_original = os.path.basename(path).split('.')[0]
+            gm_name = gm_name_original
+            n = 2
+            while True:  # 避免重复地震动名称
+                if gm_name in self.main.gm_name:
+                    gm_name = gm_name_original + f' ({n})'
+                    n += 1
+                else:
+                    break
+            self.main.gm_name.append(gm_name)
             self.main.gm_unit.append('g')
             self.main.gm_PGA.append(max(abs(th)))
         self.close_win()
@@ -1373,8 +1382,16 @@ class Win_importGM(QDialog):
             self.main.gm_N += 1
             self.main.gm_dt.append(dt)
             name = records.get_record_name()[i].replace('/', '_')
-            name = name.replace('\\', '_')
-            self.main.gm_name.append(name)
+            gm_name_original = name.replace('\\', '_')
+            gm_name = gm_name_original
+            n = 2
+            while True:  # 避免重复地震动名称
+                if gm_name in self.main.gm_name:
+                    gm_name = gm_name_original + f' ({n})'
+                    n += 1
+                else:
+                    break
+            self.main.gm_name.append(gm_name)
             self.main.gm_unit.append('g')
             self.main.gm_PGA.append(max(abs(th)))
         self.close_win()
@@ -1425,7 +1442,16 @@ class Win_importGM1(QDialog):
         t, th = data[:, 0], data[:, 1]
         dt = t[1] - t[0]
         self.main.gm.append(th)
-        self.main.gm_name.append(Win_importGM1.gm_name[idx])
+        gm_name_original = Win_importGM1.gm_name[idx]
+        gm_name = gm_name_original
+        n = 2
+        while True:  # 避免重复地震动名称
+            if gm_name in self.main.gm_name:
+                gm_name = gm_name_original + f' ({n})'
+                n += 1
+            else:
+                break
+        self.main.gm_name.append(gm_name)
         self.main.gm_N += 1
         self.main.gm_dt.append(dt)
         self.main.gm_NPTS.append(len(th) - 1)

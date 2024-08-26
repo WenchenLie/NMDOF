@@ -118,9 +118,9 @@ proc run_OS_tcl {N m mat_lib story_mat th_path SF dt mode_num has_damping zeta_m
     file mkdir "$path/temp_NLMDOF_results"
     # 1 base node
     recorder Node -file [format "%s/temp_NLMDOF_results/%s_base_reaction.txt" $path $gm_name] -time -node 1 -dof 1 reaction
-    recorder Node -file [format "%s/temp_NLMDOF_results/%s_base_acc.txt" $path $gm_name] -time -node $static_node -dof 1 accel
-    recorder Node -file [format "%s/temp_NLMDOF_results/%s_base_vel.txt" $path $gm_name] -time -node $static_node -dof 1 vel
-    recorder Node -file [format "%s/temp_NLMDOF_results/%s_base_disp.txt" $path $gm_name] -time -node $static_node -dof 1 disp
+    recorder Node -file [format "%s/temp_NLMDOF_results/%s_base_acc.txt" $path $gm_name] -node $static_node -dof 1 accel
+    recorder Node -file [format "%s/temp_NLMDOF_results/%s_base_vel.txt" $path $gm_name] -node $static_node -dof 1 vel
+    recorder Node -file [format "%s/temp_NLMDOF_results/%s_base_disp.txt" $path $gm_name] -node $static_node -dof 1 disp
     # 2 floor nodes
     set floor_nodes [list]
     for {set i 0} {$i < $N} {incr i} {lappend floor_nodes [expr 2 + $i]}

@@ -4,7 +4,7 @@ from math import pi
 from typing import Literal
 
 import numpy as np
-from core import opensees as ops
+import opensees.openseespy as ops
 
 
 def run_OS_py(
@@ -70,17 +70,17 @@ def run_OS_py(
     if mode_num >= 5:
         mode_num = 5
 
-    ops.wipe()
-    ops.model('basic', '-ndm', 2, '-ndf', 3)
+
+    model = ops.Model(ndm=2, ndf=3)
 
     # node
-    ops.node(1, 0, 0)  # base node
-    ops.fix(1, 1, 1, 1)
+    model.node(1, 0, 0)  # base node
+    model.fix(1, 1, 1, 1)
     all_node_tags = [1]
     story_nodes = []
     for i in range(N):
-        ops.node(i + 2, 0, 0, '-mass', m[i], 0, 0)
-        ops.fix(i + 2, 0, 1, 1)
+        model.node(i + 2, 0, 0, '-mass', m[i], 0, 0)
+        model.fix(i + 2, 0, 1, 1)
         story_nodes.append(i + 2)
         all_node_tags.append(i + 2)
     nodeTag = i + 3
@@ -88,7 +88,7 @@ def run_OS_py(
     # material
     for i, mat in enumerate(mat_lib):
         try:
-            ops.uniaxialMaterial(*mat)
+            model.uniaxialMaterial(*mat)
         except Exception as e:
             print(traceback.format_exc())
             print(e.args)
@@ -102,14 +102,14 @@ def run_OS_py(
     for i in range(N):
         element_tags.append([])
         for j in range(len(story_mat[i])):
-            ops.element('zeroLength', current_ele_tag, i + 1, i + 2, '-mat', story_mat[i][j], '-dir', 1, '-doRayleigh', 1)
+            model.element('zeroLength', current_ele_tag, i + 1, i + 2, '-mat', story_mat[i][j], '-dir', 1, '-doRayleigh', 1)
             element_tags[i].append(current_ele_tag)
             all_element_tags.append(current_ele_tag)
             current_ele_tag += 1
 
     # Eigen analysis
     solver = '-genBandArpack' if N > 5 else '-fullGenLapack'
-    lambda_ = ops.eigen(solver, mode_num)
+    lambda_ = model.eigen(solver, mode_num)
     omg = [i ** 0.5 for i in lambda_]
     T = [2 * pi / i for i in omg]
     myprint('')
@@ -118,23 +118,23 @@ def run_OS_py(
     np.savetxt(f'{path}/temp_NLMDOF_results/Periods.txt', T)
 
     # ground motion
-    ops.timeSeries('Path', 1, '-dt', dt, '-values', *th, '-factor', SF * g)
+    model.timeSeries('Path', 1, '-dt', dt, '-values', *th, '-factor', SF * g)
     for i in range(N):
-        ops.pattern('Plain', i + 1, 1, '-fact', -m[i])  # D'Alembert's principle
-        ops.load(story_nodes[i], 1, 0, 0)
+        model.pattern('Plain', i + 1, 1, '-fact', -m[i])  # D'Alembert's principle
+        model.load(story_nodes[i], 1, 0, 0)
 
     # 用于读取绝对响应的零刚度SDOF
     large_m = max(m) * 1e6
-    ops.node(nodeTag, 0, 0, 0)
-    ops.node(nodeTag + 1, 0, 0, 0)
-    ops.fix(nodeTag, 1, 1, 1)
-    ops.fix(nodeTag + 1, 0, 1, 1)
-    ops.mass(nodeTag + 1, large_m, 0, 0)
+    model.node(nodeTag, 0, 0, 0)
+    model.node(nodeTag + 1, 0, 0, 0)
+    model.fix(nodeTag, 1, 1, 1)
+    model.fix(nodeTag + 1, 0, 1, 1)
+    model.mass(nodeTag + 1, large_m, 0, 0)
     static_node = nodeTag + 1  # 静止节点
-    ops.uniaxialMaterial('Elastic', matTag, 0)
-    ops.element('zeroLength', current_ele_tag, nodeTag, nodeTag + 1, '-mat', matTag, '-dir', 1, '-doRayleigh', 0)
-    ops.pattern('Plain', i + 2, 1, '-fact', large_m)
-    ops.load(static_node, 1, 0, 0)
+    model.uniaxialMaterial('Elastic', matTag, 0)
+    model.element('zeroLength', current_ele_tag, nodeTag, nodeTag + 1, '-mat', matTag, '-dir', 1, '-doRayleigh', 0)
+    model.pattern('Plain', i + 2, 1, '-fact', large_m)
+    model.load(static_node, 1, 0, 0)
     nodeTag += 2
     matTag += 1
     current_ele_tag += 1
@@ -153,9 +153,9 @@ def run_OS_py(
             a = 0
             b = 2 * z1 / w1
         myprint('阻尼: a =', a, ' b =', b)
-        # ops.rayleigh(a, 0, b, 0)
-        ops.region(1, '-ele', *all_element_tags, '-rayleigh', a, 0, b, 0)
-        ops.region(1, '-node', *all_node_tags, '-rayleigh', a, 0, b, 0)
+        # model.rayleigh(a, 0, b, 0)
+        model.region(1, '-ele', *all_element_tags, '-rayleigh', a, 0, b, 0)
+        model.region(1, '-node', *all_node_tags, '-rayleigh', a, 0, b, 0)
     else:
         myprint('无阻尼')
 
@@ -163,32 +163,32 @@ def run_OS_py(
     if not os.path.exists(f'{path}/temp_NLMDOF_results'):
         os.makedirs(f'{path}/temp_NLMDOF_results')
     # 1 base node
-    ops.recorder('Node', '-file', f'{path}/temp_NLMDOF_results/{gm_name}_base_reaction.txt', '-time', '-node', 1, '-dof', 1, 'reaction')
-    ops.recorder('Node', '-file', f'{path}/temp_NLMDOF_results/{gm_name}_base_acc.txt', '-node', static_node, '-dof', 1, 'accel')
-    ops.recorder('Node', '-file', f'{path}/temp_NLMDOF_results/{gm_name}_base_vel.txt', '-node', static_node, '-dof', 1, 'vel')
-    ops.recorder('Node', '-file', f'{path}/temp_NLMDOF_results/{gm_name}_base_disp.txt', '-node', static_node, '-dof', 1, 'disp')
+    model.recorder('Node', '-file', f'{path}/temp_NLMDOF_results/{gm_name}_base_reaction.txt', '-time', '-node', 1, '-dof', 1, 'reaction')
+    model.recorder('Node', '-file', f'{path}/temp_NLMDOF_results/{gm_name}_base_acc.txt', '-node', static_node, '-dof', 1, 'accel')
+    model.recorder('Node', '-file', f'{path}/temp_NLMDOF_results/{gm_name}_base_vel.txt', '-node', static_node, '-dof', 1, 'vel')
+    model.recorder('Node', '-file', f'{path}/temp_NLMDOF_results/{gm_name}_base_disp.txt', '-node', static_node, '-dof', 1, 'disp')
     # 2 floor nodes
     floor_nodes = [2 + i for i in range(N)]
-    ops.recorder('Node', '-file', f'{path}/temp_NLMDOF_results/{gm_name}_floor_acc.txt', '-node', *floor_nodes, '-dof', 1, 'accel')
-    ops.recorder('Node', '-file', f'{path}/temp_NLMDOF_results/{gm_name}_floor_vel.txt', '-node', *floor_nodes, '-dof', 1, 'vel')
-    ops.recorder('Node', '-file', f'{path}/temp_NLMDOF_results/{gm_name}_floor_disp.txt', '-node', *floor_nodes, '-dof', 1, 'disp')
+    model.recorder('Node', '-file', f'{path}/temp_NLMDOF_results/{gm_name}_floor_acc.txt', '-node', *floor_nodes, '-dof', 1, 'accel')
+    model.recorder('Node', '-file', f'{path}/temp_NLMDOF_results/{gm_name}_floor_vel.txt', '-node', *floor_nodes, '-dof', 1, 'vel')
+    model.recorder('Node', '-file', f'{path}/temp_NLMDOF_results/{gm_name}_floor_disp.txt', '-node', *floor_nodes, '-dof', 1, 'disp')
     # 3 material hysteretic curves
-    ops.recorder('Element', '-file', f'{path}/temp_NLMDOF_results/{gm_name}_material.txt', '-ele', *all_element_tags, 'material', 1, 'stressStrain')
+    model.recorder('Element', '-file', f'{path}/temp_NLMDOF_results/{gm_name}_material.txt', '-ele', *all_element_tags, 'material', 1, 'stressStrain')
     # 4 modal results
     for i in range(1, mode_num + 1):
-        ops.recorder('Node', '-file', f'{path}/temp_NLMDOF_results/mode_{i}.txt', '-node', *floor_nodes, '-dof', 1, f'eigen {i}')
+        model.recorder('Node', '-file', f'{path}/temp_NLMDOF_results/mode_{i}.txt', '-node', *floor_nodes, '-dof', 1, f'eigen {i}')
 
     # Time history analysis
     if setting[6]:
-        ops.constraints(setting[0], setting[6], setting[7])
+        model.constraints(setting[0], setting[6], setting[7])
     else:
-        ops.constraints(setting[0])
-    ops.numberer(setting[1])
-    ops.system(setting[2])
-    ops.test(setting[3], setting[8], setting[9])
-    ops.algorithm(setting[4])
-    ops.integrator(setting[5], setting[10], setting[11])
-    ops.analysis('Transient')
+        model.constraints(setting[0])
+    model.numberer(setting[1])
+    model.system(setting[2])
+    model.test(setting[3], setting[8], setting[9])
+    model.algorithm(setting[4])
+    model.integrator(setting[5], setting[10], setting[11])
+    model.analysis('Transient')
 
     current_time = 0
     duration = dt * (len(th) - 1)
@@ -205,7 +205,7 @@ def run_OS_py(
         dt = init_dt * factor * dt_ratio
         if current_time + dt > duration:
             dt = duration - current_time
-        ok = ops.analyze(1, dt)
+        ok = model.analyze(1, dt)
         if ok == 0:
             # current step finished
             current_time += dt
@@ -230,8 +230,8 @@ def run_OS_py(
                 dt = init_dt * factor
                 myprint(f'Current step did not converge, reduce factor to {factor}.')
     
-    ops.wipeAnalysis()
-    ops.wipe()
+    model.wipeAnalysis()
+    model.wipe()
     myprint('========== 分析结束 ==========')
     
     return done, T, element_tags

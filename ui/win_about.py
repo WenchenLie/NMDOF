@@ -36,7 +36,7 @@ class Ui_win_about(object):
         self.frame.setLineWidth(1)
         self.frame.setObjectName("frame")
         self.label = QtWidgets.QLabel(self.frame)
-        self.label.setGeometry(QtCore.QRect(40, 40, 171, 150))
+        self.label.setGeometry(QtCore.QRect(50, 40, 150, 150))
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
         sizePolicy.setHorizontalStretch(1)
         sizePolicy.setVerticalStretch(1)

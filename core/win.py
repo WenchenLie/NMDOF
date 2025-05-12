@@ -32,11 +32,12 @@ from ui.win_data import Ui_win_data
 from ui.win_export import Ui_win_export
 from ui.win_about import Ui_win_about
 from ui.win_terminal import Ui_win_terminal
+from ui.win_scale import Ui_win_scale
 
 
 SOFTWARE = '非线性多自由度时程分析软件'
-VERSION = 'V2.0.2'
-DATE = '2024.08.26'
+VERSION = 'V2.1.0'
+DATE = '2024.10.27'
 TEMP_PATH = Path(os.getenv('TEMP')).as_posix()
 ROOT = Path(__file__).parent.parent
 
@@ -84,6 +85,7 @@ class MyWin(QMainWindow):
         self.ui.setupUi(self)
         self.setWindowTitle(f'{SOFTWARE} {VERSION}')
         self.ui.pushButton.clicked.connect(self.open_win_select_gm)
+        self.ui.pushButton_23.clicked.connect(self.open_win_scale)
         self.ui.pushButton_2.clicked.connect(self.open_win_select_gm1)
         self.ui.pushButton_5.clicked.connect(self.delete_seleted)
         self.ui.pushButton_4.clicked.connect(self.delete_all)
@@ -157,14 +159,14 @@ class MyWin(QMainWindow):
 
     def init_gm_var(self):
         """初始化地震动变量"""
-        self.gm = []  # 加速度序列
-        self.gm_name = []
-        self.gm_N = 0
-        self.gm_dt  = []
-        self.gm_NPTS = []
-        self.gm_t = []  # 时间序列
-        self.gm_duration = []  # 持时
-        self.gm_unit = []  # 单位
+        self.gm: list[np.ndarray] = []  # 加速度序列
+        self.gm_name: list[str] = []
+        self.gm_N: int = 0
+        self.gm_dt: list[float]  = []
+        self.gm_NPTS: list[int] = []
+        self.gm_t: list[np.ndarray] = []  # 时间序列
+        self.gm_duration: list[float] = []  # 持时
+        self.gm_unit: list[Literal['g', 'cm/s^2', 'm/s^2', 'mm/s^2']] = []  # 单位
         self.gm_PGA = []
 
     def init_var(self):
@@ -275,6 +277,11 @@ class MyWin(QMainWindow):
         win = Win_importGM(self)
         win.exec_()
 
+    def open_win_scale(self):
+        win = Win_scale(self)
+        win.exec_()
+        self.plot_gm(None, self.current_gm_idx)
+
     def gm_list_update(self):
         """更新地震动列表"""
         self.ui.listWidget.clear()
@@ -358,16 +365,15 @@ class MyWin(QMainWindow):
             self.ui.lineEdit_4.setText('0.00001')
         if float(self.ui.lineEdit.text()) == 0:
             self.ui.lineEdit.setText('0.00001')
+        target_PGA = float(self.ui.lineEdit_4.text())
+        target_dt = float(self.ui.lineEdit.text())
         idx = self.current_gm_idx
-        self.gm_PGA[idx] = float(self.ui.lineEdit_4.text())
-        self.gm_dt[idx] = float(self.ui.lineEdit.text())
+        self.gm_PGA[idx] = target_PGA
+        self.gm_t[idx] *= float(self.ui.lineEdit.text()) / self.gm_dt[idx]
+        self.gm_dt[idx] = target_dt
         self.gm_unit[idx] = self.ui.comboBox.currentText()
-        self.gm_duration[idx] = self.gm_NPTS[idx] * float(self.ui.lineEdit.text())
-        th_old = self.gm[idx]
-        th = th_old / max(abs(th_old)) * float(self.ui.lineEdit_4.text())
-        t = np.linspace(0, self.gm_NPTS[idx] * float(self.ui.lineEdit.text()), self.gm_NPTS[idx] + 1)
-        self.gm[idx] = th
-        self.gm_t[idx] = t
+        self.gm_duration[idx] = self.gm_NPTS[idx] * target_dt
+        self.gm[idx] *= target_PGA / max(abs(self.gm[idx]))
         self.ui.label_5.setText(f'{self.gm_name[idx]}已更新')
         self.plot_gm(None, idx=idx)
 
@@ -572,8 +578,8 @@ class MyWin(QMainWindow):
             print('【MyWin, model_is_complete】质量数量与层数不等')
             return False
         print('【MyWin, model_is_complete】模型完备！')
-        print('【MyWin, model_is_complete】', self.mat_lib)
-        print('【MyWin, model_is_complete】', self.story_mat)
+        print('【MyWin, model_is_complete】材料定义：', self.mat_lib)
+        print('【MyWin, model_is_complete】楼层材料', self.story_mat)
         return True
         
     def mat_is_complete(self):
@@ -2785,3 +2791,47 @@ class Win_terminal(QDialog):
         self.ui.setupUi(self)
         sys.stdout = core.EmittingStream(self.ui.textEdit)
         sys.stderr = core.EmittingStream(self.ui.textEdit)
+
+
+class Win_scale(QDialog):
+    """统一缩放地震动"""
+    def __init__(self, main: MyWin, parent=None):
+        super().__init__(parent)
+        self.main = main
+        self.ui = Ui_win_scale()
+        self.ui.setupUi(self)
+        self.init_ui()
+        
+    def init_ui(self):
+        validator = QDoubleValidator(0, 10000, 7)
+        validator.setNotation(QDoubleValidator.StandardNotation)
+        self.ui.lineEdit.setValidator(validator)
+        self.ui.lineEdit_4.setValidator(validator)
+        self.ui.pushButton.clicked.connect(self.confirmation)
+        self.ui.radioButton_5.toggled.connect(lambda: self.ui.lineEdit.setEnabled(self.ui.radioButton_5.isChecked()))
+        self.ui.radioButton_6.toggled.connect(lambda: self.ui.lineEdit_4.setEnabled(self.ui.radioButton_6.isChecked()))
+
+    def confirmation(self):
+        """点击确认"""
+        print(f'【Win_scale, confirmation】进行地震动缩放')
+        if self.main.gm_N == 0:
+            self.accept()
+            return
+        if self.ui.radioButton_4.isChecked():
+            # 归一化
+            for idx in range(self.main.gm_N):
+                self.main.gm[idx] /= np.max(abs(self.main.gm[idx]))
+        elif self.ui.radioButton_5.isChecked():
+            # 指定PGA
+            PGA = float(self.ui.lineEdit.text())
+            for idx in range(self.main.gm_N):
+                self.main.gm[idx] *= PGA / np.max(abs(self.main.gm[idx]))
+        else:
+            # 指定缩放系数
+            SF = float(self.ui.lineEdit_4.text())
+            for idx in range(self.main.gm_N):
+                self.main.gm[idx] *= SF
+        self.main.ui.label_5.setText('已统一缩放')
+        self.accept()
+
+        

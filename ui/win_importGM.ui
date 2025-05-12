@@ -208,7 +208,7 @@
       <item>
        <widget class="QCheckBox" name="checkBox_2">
         <property name="text">
-         <string>缩放</string>
+         <string>采用内置缩放</string>
         </property>
        </widget>
       </item>

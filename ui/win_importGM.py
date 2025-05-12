@@ -144,7 +144,7 @@ class Ui_win_importGM(object):
         self.radioButton_6.setText(_translate("win_importGM", "指定缩放系数："))
         self.lineEdit_4.setText(_translate("win_importGM", "1"))
         self.groupBox_3.setTitle(_translate("win_importGM", "通过.records文件导入"))
-        self.checkBox_2.setText(_translate("win_importGM", "缩放"))
+        self.checkBox_2.setText(_translate("win_importGM", "采用内置缩放"))
         self.pushButton_2.setText(_translate("win_importGM", "选择.records"))
         self.pushButton.setText(_translate("win_importGM", "选择文件"))
 import resource_rc

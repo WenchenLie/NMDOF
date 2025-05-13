@@ -1,6 +1,4 @@
-import os
-import re
-import sys
+import os, sys, re
 from typing import Literal
 from shutil import rmtree
 from pathlib import Path
@@ -36,10 +34,11 @@ from ui.win_scale import Ui_win_scale
 
 
 SOFTWARE = '非线性多自由度时程分析软件'
-VERSION = 'V2.1.0'
-DATE = '2024.10.27'
+VERSION = 'V2.1.1'
+DATE = '2025.5.13'
 TEMP_PATH = Path(os.getenv('TEMP')).as_posix()
 ROOT = Path(__file__).parent.parent
+STD_IN_SOFTWARE = True
 
 
 class MyWin(QMainWindow):
@@ -1641,7 +1640,7 @@ class Win_mat(QDialog):
                 self.ui.lineEdit_3.setText(str(self.main.mat_lib[self.mod_idx][7]))
                 self.ui.lineEdit_4.setText(str(self.main.mat_lib[self.mod_idx][8]))
         elif self.mat_idx == 3:
-            self.ui.label_2.setText('屈服力（Fy [n]）：')
+            self.ui.label_2.setText('屈服力（Fy [N]）：')
             self.ui.label_3.setText('初始刚度（E [N/mm]）：')
             self.ui.label_4.clear()
             self.ui.label_5.clear()
@@ -1708,7 +1707,7 @@ class Win_mat(QDialog):
                 QMessageBox.warning(self, '警告', '存在参数未定义！')
                 return
             else:
-                para = [commentName, 3, have_name, 'Steel01', int(self.main.mat_N + 1), p1, p2, 0]
+                para = [commentName, 3, have_name, 'Steel01', int(self.main.mat_N + 1), p1, p2, "0"]
         elif self.mat_idx == 4:  # 黏性
             if not commentName:
                 commentName = f'黏性(E={p1})'
@@ -2789,8 +2788,9 @@ class Win_terminal(QDialog):
         super().__init__(parent)
         self.ui = Ui_win_terminal()
         self.ui.setupUi(self)
-        sys.stdout = core.EmittingStream(self.ui.textEdit)
-        sys.stderr = core.EmittingStream(self.ui.textEdit)
+        if STD_IN_SOFTWARE:
+            sys.stdout = core.EmittingStream(self.ui.textEdit)
+            sys.stderr = core.EmittingStream(self.ui.textEdit)
 
 
 class Win_scale(QDialog):
